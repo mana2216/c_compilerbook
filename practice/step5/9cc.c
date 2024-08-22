@@ -1,15 +1,17 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
-#include <stdlib.h>
 
 typedef enum {
   TK_RESERVED,
   TK_NUM,
   TK_EOF,
 } TokenKind;
+
+char *user_input;
 
 typedef struct Token Token;
 
@@ -30,8 +32,6 @@ void error(char *fmt, ...) {
   exit(1);
 }
 
-char *user_input;
-
 void error_at(char *loc, char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
@@ -46,7 +46,7 @@ void error_at(char *loc, char *fmt, ...) {
 }
 
 bool consume(char op) {
-  if (TK_RESERVED != token->kind || op != token->str[0]) {
+  if (token->kind != TK_RESERVED || token->str[0] != op) {
     return false;
   }
   token = token->next;
@@ -55,7 +55,7 @@ bool consume(char op) {
 
 void expect(char op) {
   if (token->kind != TK_RESERVED || token->str[0] != op) {
-    error_at(token->str, "expected %c", op);
+    error_at(token->str, "'%c'ではありません", op);
   }
   token = token->next;
 }
@@ -104,10 +104,9 @@ Token *tokenize(void) {
       cur->val = strtol(p, &p, 10);
       continue;
     }
-
+    
     error_at(p, "トークナイズできません");
   }
-
   new_token(TK_EOF, cur, p);
   return head.next;
 }
@@ -117,7 +116,7 @@ typedef enum {
   ND_SUB,
   ND_MUL,
   ND_DIV,
-  ND_NUM,
+  ND_NUM
 } NodeKind;
 
 typedef struct Node Node;
@@ -165,21 +164,19 @@ Node *expr(void) {
 Node *mul(void) {
   Node *node = primary();
 
-  for (;;) {
-    if (consume('*')) {
-      node = new_node(ND_MUL, node, primary());
-    } else if (consume('/')) {
-      node = new_node(ND_DIV, node , primary());
-    } else {
-      return node;
-    }
+  if (consume('*')) {
+    node = new_node(ND_MUL, node, primary());
+  } else if (consume('/')) {
+    node = new_node(ND_DIV, node, primary());
+  } else {
+    return node;
   }
 }
 
 Node *primary(void) {
   if (consume('(')) {
     Node *node = expr();
-    consume(')');
+    expect(')');
     return node;
   }
 
@@ -198,24 +195,30 @@ void gen(Node *node) {
   printf("  pop rdi\n");
   printf("  pop rax\n");
 
-  switch (node->kind) {
-    case ND_ADD:
-      printf("  add rax, rdi\n");
-      break;
-    case ND_SUB:
-      printf("  sub rax, rdi\n");
-      break;
-    case ND_MUL:
-      printf("  imul rax, rdi\n");
-      break;
-    case ND_DIV:
-      printf("  cqo\n");
-      printf("  idiv rdi\n");
-      break;
+  switch (node->kind)
+  {
+  case ND_ADD:
+    printf("  add rax, rdi\n");
+    break;
+  case ND_SUB:
+    printf("  sub rax, rdi\n");
+    break;
+  case ND_MUL:
+    printf("  imul rax, rdi\n");
+    break;
+  case ND_DIV:
+    printf("  cqo\n");
+    printf("  idiv rdi\n");
+    break;
+  
+  default:
+    break;
   }
 
   printf("  push rax\n");
 }
+
+
 
 int main(int argc, char *argv[]) {
   if (argc != 2) {
